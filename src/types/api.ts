@@ -91,6 +91,7 @@ export interface UserProfile {
     enrollmentYear?: number | null;
     role: string;
     isActive: boolean;
+    canUploadErrors: boolean;
 }
 
 export interface UpdateUserProfileRequest {

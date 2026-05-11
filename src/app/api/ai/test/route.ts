@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { canManageSystemSettings, getActiveCurrentUser } from '@/lib/auth-utils';
 import { OpenAIProvider } from '@/lib/ai/openai-provider';
 import { GeminiProvider } from '@/lib/ai/gemini-provider';
 import { AzureOpenAIProvider } from '@/lib/ai/azure-provider';
 import { createLogger } from '@/lib/logger';
+import { forbidden, unauthorized } from '@/lib/api-errors';
 
 const logger = createLogger('api:ai:test');
 
@@ -93,11 +95,10 @@ export interface AITestResponse {
 
 export async function POST(request: NextRequest) {
     try {
-        // 验证登录
         const session = await getServerSession(authOptions);
-        if (!session?.user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = await getActiveCurrentUser(session);
+        if (!user) return unauthorized();
+        if (!canManageSystemSettings(user)) return forbidden('Admin access required');
 
         const body: AITestRequest = await request.json();
         const { provider, apiKey, baseUrl, model, endpoint, deploymentName, apiVersion, language = 'zh' } = body;

@@ -79,7 +79,7 @@ describe('/api/register', () => {
             expect(data.message).toBe('User created successfully');
         });
 
-        it('应该拒绝已存在的邮箱', async () => {
+        it('应该拒绝已存在的账号', async () => {
             mocks.mockPrismaUser.findUnique.mockResolvedValue({
                 id: 'existing-user-id',
                 email: 'newuser@example.com',
@@ -95,7 +95,7 @@ describe('/api/register', () => {
             const data = await response.json();
 
             expect(response.status).toBe(409);
-            expect(data.message).toBe('User with this email already exists');
+            expect(data.message).toBe('User with this email or phone already exists');
         });
 
         it('应该接受 user@localhost 邮箱格式', async () => {
@@ -123,7 +123,36 @@ describe('/api/register', () => {
             expect(data.user.email).toBe('user@localhost');
         });
 
-        it('应该拒绝无效邮箱格式', async () => {
+        it('应该接受手机号作为登录账号', async () => {
+            mocks.mockPrismaUser.findUnique.mockResolvedValue(null);
+            mocks.mockPrismaUser.create.mockResolvedValue({
+                id: 'new-user-id',
+                email: '13800138000',
+                password: 'hashed_password123',
+                name: 'Phone User',
+            });
+
+            const request = new Request('http://localhost/api/register', {
+                method: 'POST',
+                body: JSON.stringify({
+                    ...validUserData,
+                    email: '138 0013 8000',
+                    name: 'Phone User',
+                }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await POST(request);
+            const data = await response.json();
+
+            expect(response.status).toBe(201);
+            expect(data.user.email).toBe('13800138000');
+            expect(mocks.mockPrismaUser.findUnique).toHaveBeenCalledWith({
+                where: { email: '13800138000' },
+            });
+        });
+
+        it('应该拒绝无效账号格式', async () => {
             const request = new Request('http://localhost/api/register', {
                 method: 'POST',
                 body: JSON.stringify({

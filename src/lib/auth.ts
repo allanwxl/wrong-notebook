@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { compare } from "bcryptjs"
 import { createLogger } from "@/lib/logger"
+import { normalizeUserIdentifier } from "@/lib/user-identifier"
 
 const logger = createLogger('auth');
 
@@ -36,7 +37,7 @@ export const authOptions: NextAuthOptions = {
         CredentialsProvider({
             name: "Credentials",
             credentials: {
-                email: { label: "Email", type: "email" },
+                email: { label: "Email or phone", type: "text" },
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
@@ -48,7 +49,7 @@ export const authOptions: NextAuthOptions = {
 
                 const user = await prisma.user.findUnique({
                     where: {
-                        email: credentials.email
+                        email: normalizeUserIdentifier(credentials.email)
                     }
                 })
 
@@ -77,6 +78,8 @@ export const authOptions: NextAuthOptions = {
                     email: user.email,
                     name: user.name,
                     role: user.role,
+                    isActive: user.isActive,
+                    canUploadErrors: user.canUploadErrors,
                 }
             }
         })
@@ -103,6 +106,8 @@ export const authOptions: NextAuthOptions = {
                     ...session.user,
                     id: token.id,
                     role: token.role,
+                    isActive: token.isActive,
+                    canUploadErrors: token.canUploadErrors,
                 }
             }
         },
@@ -112,7 +117,9 @@ export const authOptions: NextAuthOptions = {
                 return {
                     ...token,
                     id: user.id,
-                    role: (user as any).role,
+                    role: user.role,
+                    isActive: user.isActive,
+                    canUploadErrors: user.canUploadErrors,
                 }
             }
             logger.debug('JWT callback - Subsequent call');

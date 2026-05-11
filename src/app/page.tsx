@@ -17,9 +17,11 @@ import { Upload, BookOpen, Tags, LogOut, BarChart3 } from "lucide-react";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { BroadcastNotification } from "@/components/broadcast-notification";
 import { signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 
 import { ProgressFeedback, ProgressStatus } from "@/components/ui/progress-feedback";
 import { frontendLogger } from "@/lib/frontend-logger";
+import { AssignmentStudentSelector } from "@/components/assignment-student-selector";
 
 function HomeContent() {
     const [step, setStep] = useState<"upload" | "review">("upload");
@@ -30,11 +32,16 @@ function HomeContent() {
     const { t, language } = useLanguage();
     const searchParams = useSearchParams();
     const router = useRouter();
+    const { data: session } = useSession();
     const initialNotebookId = searchParams.get("notebook");
     const [notebooks, setNotebooks] = useState<{ id: string; name: string }[]>([]);
     const [autoSelectedNotebookId, setAutoSelectedNotebookId] = useState<string | null>(null);
 
     const [config, setConfig] = useState<AppConfig | null>(null);
+    const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+    const currentRole = session?.user?.role || "user";
+    const canUpload = currentRole === "admin" || currentRole === "teacher" || session?.user?.canUploadErrors !== false;
+    const canAssign = currentRole === "admin" || currentRole === "teacher";
 
     // Cropper state
     const [croppingImage, setCroppingImage] = useState<string | null>(null);
@@ -59,18 +66,19 @@ function HomeContent() {
             .then(data => setNotebooks(data))
             .catch(err => console.error("Failed to fetch notebooks:", err));
 
-        // Fetch settings for timeouts
-        apiClient.get<AppConfig>("/api/settings")
-            .then(data => {
-                setConfig(data);
-                if (data.timeouts?.analyze) {
-                    frontendLogger.info('[Config]', 'Loaded timeout settings', {
-                        analyze: data.timeouts.analyze
-                    });
-                }
-            })
-            .catch(err => console.error("Failed to fetch config:", err));
-    }, []);
+        if (session?.user?.role === "admin") {
+            apiClient.get<AppConfig>("/api/settings")
+                .then(data => {
+                    setConfig(data);
+                    if (data.timeouts?.analyze) {
+                        frontendLogger.info('[Config]', 'Loaded timeout settings', {
+                            analyze: data.timeouts.analyze
+                        });
+                    }
+                })
+                .catch(err => console.error("Failed to fetch config:", err));
+        }
+    }, [session?.user?.role]);
 
     // Simulate progress for smoother UX with timeout protection
     useEffect(() => {
@@ -111,6 +119,11 @@ function HomeContent() {
     };
 
     const handleAnalyze = async (file: File) => {
+        if (!canUpload) {
+            alert("上传权限已被管理员关闭");
+            return;
+        }
+
         const startTime = Date.now();
         frontendLogger.info('[HomeAnalyze]', 'Starting analysis flow', {
             timeoutSettings: {
@@ -191,9 +204,26 @@ function HomeContent() {
             });
         } catch (error: any) {
             const errorDuration = Date.now() - startTime;
+            const backendErrorData = error?.data;
+            const backendErrorMessage = typeof backendErrorData === "object" && backendErrorData !== null && "message" in backendErrorData
+                ? String((backendErrorData as { message?: unknown }).message || "")
+                : undefined;
+            const backendErrorCode = typeof backendErrorData === "object" && backendErrorData !== null && "code" in backendErrorData
+                ? String((backendErrorData as { code?: unknown }).code || "")
+                : undefined;
+            const backendErrorDetails = typeof backendErrorData === "object" && backendErrorData !== null && "details" in backendErrorData
+                ? (backendErrorData as { details?: unknown }).details
+                : undefined;
             frontendLogger.error('[HomeError]', 'Analysis failed', {
                 errorDuration,
-                error: error.message || String(error)
+                errorName: error?.name,
+                errorStatus: error?.status,
+                errorStatusText: error?.statusText,
+                errorMessage: error?.message || String(error),
+                backendErrorMessage,
+                backendErrorCode,
+                backendErrorDetails,
+                backendErrorData: typeof backendErrorData === "string" ? backendErrorData.slice(0, 500) : backendErrorData,
             });
 
             // 安全的错误处理逻辑，防止在报错时二次报错
@@ -201,7 +231,7 @@ function HomeContent() {
                 let errorMessage = t.common?.messages?.analysisFailed || 'Analysis failed, please try again';
 
                 // ApiError 的结构：error.data.message 包含后端返回的错误类型
-                const backendErrorType = error?.data?.message;
+                const backendErrorType = backendErrorMessage;
 
                 if (backendErrorType && typeof backendErrorType === 'string') {
                     // 检查是否是已知的 AI 错误类型
@@ -263,6 +293,12 @@ function HomeContent() {
                 originalImageUrl: currentImage || "",
             });
 
+            if (canAssign && selectedStudentIds.length > 0) {
+                await apiClient.post(`/api/error-items/${result.id}/assign`, {
+                    studentIds: selectedStudentIds,
+                });
+            }
+
             // 检查是否是重复提交（后端去重返回）
             if (result.duplicate) {
                 frontendLogger.info('[HomeSave]', 'Duplicate submission detected, using existing record');
@@ -272,6 +308,7 @@ function HomeContent() {
             setStep("upload");
             setParsedData(null);
             setCurrentImage(null);
+            setSelectedStudentIds([]);
             alert(t.common?.messages?.saveSuccess || 'Saved successfully!');
 
             // Redirect to notebook page if subjectId is present
@@ -328,17 +365,19 @@ function HomeContent() {
 
                 {/* Action Center */}
                 <div className={initialNotebookId ? "flex justify-center mb-6" : "grid grid-cols-2 md:grid-cols-4 gap-4"}>
-                    <Button
-                        size="lg"
-                        className={`h-auto py-4 text-base shadow-sm hover:shadow-md transition-all ${initialNotebookId ? "w-full max-w-md" : ""}`}
-                        variant={step === "upload" ? "default" : "secondary"}
-                        onClick={() => setStep("upload")}
-                    >
-                        <div className="flex items-center gap-2">
-                            <Upload className="h-5 w-5" />
-                            <span>{t.app.uploadNew}</span>
-                        </div>
-                    </Button>
+                    {canUpload && (
+                        <Button
+                            size="lg"
+                            className={`h-auto py-4 text-base shadow-sm hover:shadow-md transition-all ${initialNotebookId ? "w-full max-w-md" : ""}`}
+                            variant={step === "upload" ? "default" : "secondary"}
+                            onClick={() => setStep("upload")}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Upload className="h-5 w-5" />
+                                <span>{t.app.uploadNew}</span>
+                            </div>
+                        </Button>
+                    )}
 
                     {!initialNotebookId && (
                         <>
@@ -384,8 +423,14 @@ function HomeContent() {
                     )}
                 </div>
 
-                {step === "upload" && (
+                {step === "upload" && canUpload && (
                     <UploadZone onImageSelect={onImageSelect} isAnalyzing={analysisStep !== 'idle'} />
+                )}
+
+                {step === "upload" && !canUpload && (
+                    <div className="rounded-lg border bg-muted/30 p-8 text-center text-muted-foreground">
+                        上传权限已被管理员关闭。你仍可查看、复习和练习已有错题。
+                    </div>
                 )}
 
                 {croppingImage && (
@@ -398,14 +443,22 @@ function HomeContent() {
                 )}
 
                 {step === "review" && parsedData && (
-                    <CorrectionEditor
-                        initialData={parsedData}
-                        onSave={handleSave}
-                        onCancel={() => setStep("upload")}
-                        imagePreview={currentImage}
-                        initialSubjectId={initialNotebookId || autoSelectedNotebookId || undefined}
-                        aiTimeout={aiTimeout}
-                    />
+                    <div className="space-y-4">
+                        {canAssign && (
+                            <AssignmentStudentSelector
+                                selectedIds={selectedStudentIds}
+                                onChange={setSelectedStudentIds}
+                            />
+                        )}
+                        <CorrectionEditor
+                            initialData={parsedData}
+                            onSave={handleSave}
+                            onCancel={() => setStep("upload")}
+                            imagePreview={currentImage}
+                            initialSubjectId={initialNotebookId || autoSelectedNotebookId || undefined}
+                            aiTimeout={aiTimeout}
+                        />
+                    </div>
                 )}
 
             </div>

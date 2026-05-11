@@ -9,8 +9,10 @@ const mocks = vi.hoisted(() => ({
     mockPrismaUser: {
         findMany: vi.fn(),
         findUnique: vi.fn(),
+        create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
+        count: vi.fn(),
     },
     mockSession: {
         user: {
@@ -38,8 +40,12 @@ vi.mock('@/lib/auth', () => ({
     authOptions: {},
 }));
 
+vi.mock('bcryptjs', () => ({
+    hash: vi.fn(() => Promise.resolve('hashed-password')),
+}));
+
 // Import after mocks
-import { GET } from '@/app/api/admin/users/route';
+import { GET, POST } from '@/app/api/admin/users/route';
 import { PATCH, DELETE } from '@/app/api/admin/users/[id]/route';
 import { getServerSession } from 'next-auth';
 
@@ -97,6 +103,132 @@ describe('/api/admin/users', () => {
             vi.mocked(getServerSession).mockResolvedValue(null);
 
             const response = await GET();
+
+            expect(response.status).toBe(403);
+        });
+    });
+
+    describe('POST /api/admin/users', () => {
+        it('应该允许管理员创建用户', async () => {
+            const createdAt = new Date();
+            const createdUser = {
+                id: 'new-user-id',
+                name: 'New Teacher',
+                email: 'teacher@example.com',
+                role: 'teacher',
+                isActive: true,
+                canUploadErrors: true,
+                createdAt,
+                _count: { errorItems: 0, practiceRecords: 0 },
+            };
+            mocks.mockPrismaUser.findUnique.mockResolvedValue(null);
+            mocks.mockPrismaUser.create.mockResolvedValue(createdUser);
+
+            const request = new Request('http://localhost/api/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: 'New Teacher',
+                    email: 'teacher@example.com',
+                    password: 'password123',
+                    role: 'teacher',
+                    isActive: true,
+                    canUploadErrors: true,
+                }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await POST(request);
+            const data = await response.json();
+
+            expect(response.status).toBe(201);
+            expect(data.email).toBe('teacher@example.com');
+            expect(mocks.mockPrismaUser.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    email: 'teacher@example.com',
+                    password: 'hashed-password',
+                    role: 'teacher',
+                }),
+            }));
+        });
+
+        it('应该拒绝重复账号', async () => {
+            mocks.mockPrismaUser.findUnique.mockResolvedValue({
+                id: 'existing-user-id',
+                email: 'student@example.com',
+            });
+
+            const request = new Request('http://localhost/api/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: 'Student',
+                    email: 'student@example.com',
+                    password: 'password123',
+                    role: 'user',
+                }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await POST(request);
+            const data = await response.json();
+
+            expect(response.status).toBe(409);
+            expect(data.message).toBe('User with this email or phone already exists');
+            expect(mocks.mockPrismaUser.create).not.toHaveBeenCalled();
+        });
+
+        it('应该允许管理员用手机号创建用户', async () => {
+            const createdUser = {
+                id: 'phone-user-id',
+                name: 'Phone Student',
+                email: '13800138000',
+                role: 'user',
+                isActive: true,
+                canUploadErrors: true,
+                createdAt: new Date(),
+                _count: { errorItems: 0, practiceRecords: 0 },
+            };
+            mocks.mockPrismaUser.findUnique.mockResolvedValue(null);
+            mocks.mockPrismaUser.create.mockResolvedValue(createdUser);
+
+            const request = new Request('http://localhost/api/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: 'Phone Student',
+                    email: '138-0013-8000',
+                    password: 'password123',
+                    role: 'user',
+                }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await POST(request);
+
+            expect(response.status).toBe(201);
+            expect(mocks.mockPrismaUser.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    email: '13800138000',
+                }),
+            }));
+        });
+
+        it('应该拒绝非管理员创建用户', async () => {
+            vi.mocked(getServerSession).mockResolvedValue({
+                user: { id: 'user-id', email: 'user@example.com', role: 'user' },
+                expires: '2025-12-31',
+            });
+
+            const request = new Request('http://localhost/api/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: 'Student',
+                    email: 'student@example.com',
+                    password: 'password123',
+                    role: 'user',
+                }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await POST(request);
 
             expect(response.status).toBe(403);
         });

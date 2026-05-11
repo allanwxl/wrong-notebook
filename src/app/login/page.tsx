@@ -54,12 +54,13 @@ export default function LoginPage() {
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <label htmlFor="email" className="text-sm font-medium">
-                                {t.auth?.email || 'Email'}
+                                账号（邮箱或手机号）
                             </label>
                             <Input
                                 id="email"
                                 name="email"
-                                type="email"
+                                type="text"
+                                autoComplete="username"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required

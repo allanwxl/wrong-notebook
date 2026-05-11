@@ -6,6 +6,7 @@ import { z } from "zod";
 import { hash } from "bcryptjs";
 import { unauthorized, notFound, badRequest, validationError, internalError } from "@/lib/api-errors";
 import { createLogger } from "@/lib/logger";
+import { isValidUserIdentifier, normalizeUserIdentifier, userIdentifierErrorMessage } from "@/lib/user-identifier";
 
 const logger = createLogger('api:user');
 
@@ -32,6 +33,9 @@ export async function GET() {
                 email: true,
                 educationStage: true,
                 enrollmentYear: true,
+                role: true,
+                isActive: true,
+                canUploadErrors: true,
                 // Do not return password
             }
         });
@@ -69,14 +73,13 @@ export async function PATCH(req: Request) {
             updateData.enrollmentYear = enrollmentYear;
         }
 
-        // 验证邮箱格式（如果提供了邮箱）
-        // 支持标准邮箱和本地邮箱（如 admin@localhost）
+        // 验证登录账号格式（如果提供了邮箱/手机号）
         if (email && email.trim()) {
-            const emailRegex = /^[^\s@]+@[^\s@]+$/;
-            if (!emailRegex.test(email.trim())) {
-                return badRequest("Invalid email format");
+            const normalizedEmail = normalizeUserIdentifier(email);
+            if (!isValidUserIdentifier(normalizedEmail)) {
+                return badRequest(userIdentifierErrorMessage());
             }
-            updateData.email = email.trim();
+            updateData.email = normalizedEmail;
         }
 
         // 验证密码长度（如果提供了密码）

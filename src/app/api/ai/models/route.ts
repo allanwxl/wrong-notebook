@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createLogger } from '@/lib/logger';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { canManageSystemSettings, getActiveCurrentUser } from '@/lib/auth-utils';
+import { forbidden, unauthorized } from '@/lib/api-errors';
 
 const logger = createLogger('api:ai:models');
 
@@ -67,6 +71,11 @@ async function fetchOpenAIModels(apiKey: string, baseUrl: string): Promise<Model
 
 export async function GET(req: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+        const user = await getActiveCurrentUser(session);
+        if (!user) return unauthorized();
+        if (!canManageSystemSettings(user)) return forbidden('Admin access required');
+
         const { searchParams } = new URL(req.url);
         const provider = searchParams.get('provider');
         const apiKey = searchParams.get('apiKey');

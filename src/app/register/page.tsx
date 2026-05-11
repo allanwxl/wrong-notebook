@@ -66,7 +66,7 @@ export default function RegisterPage() {
             router.push("/login");
         } catch (error: any) {
             let errorMsg = error.data?.message;
-            if (errorMsg === 'User with this email already exists') {
+            if (errorMsg === 'User with this email already exists' || errorMsg === 'User with this email or phone already exists') {
                 errorMsg = t.auth?.register?.emailExists || errorMsg;
             } else {
                 errorMsg = errorMsg || (t.auth?.register?.failed || 'Registration failed');
@@ -139,12 +139,13 @@ export default function RegisterPage() {
                         </div>
                         <div className="space-y-2">
                             <label htmlFor="email" className="text-sm font-medium">
-                                {t.auth?.email || 'Email'}
+                                账号（邮箱或手机号）
                             </label>
                             <Input
                                 id="email"
                                 name="email"
-                                type="email"
+                                type="text"
+                                autoComplete="username"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required

@@ -2,7 +2,7 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -22,34 +22,38 @@ model User {
   educationStage String? // primary, junior_high, senior_high, university
   enrollmentYear Int?
 
-  role      String   @default("user") // "admin" or "user"
-  isActive  Boolean  @default(true)   // 用户是否启用
+  role            String  @default("user") // "admin", "teacher", or "user" (student)
+  isActive        Boolean @default(true) // 用户是否启用
+  canUploadErrors Boolean @default(true) // 学生是否允许主动上传错题
 
-  errorItems ErrorItem[]
-  subjects   Subject[]
-  practiceRecords PracticeRecord[]
-  customTags KnowledgeTag[] // User's custom tags
+  errorItems          ErrorItem[]
+  assignedErrorCopies ErrorItem[]      @relation("AssignedByTeacher")
+  teacherAssignments  Assignment[]     @relation("TeacherAssignments")
+  studentAssignments  Assignment[]     @relation("StudentAssignments")
+  subjects            Subject[]
+  practiceRecords     PracticeRecord[]
+  customTags          KnowledgeTag[] // User's custom tags
 }
 
 // 统一知识点标签表 (支持无限层级)
 model KnowledgeTag {
-  id        String   @id @default(cuid())
-  name      String   // 标签名，如 "勾股定理"
-  subject   String   // 学科，如 "math", "english"
+  id      String @id @default(cuid())
+  name    String // 标签名，如 "勾股定理"
+  subject String // 学科，如 "math", "english"
 
   // 层级控制 (邻接表模式)
-  parentId  String?
-  parent    KnowledgeTag?  @relation("TagHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children  KnowledgeTag[] @relation("TagHierarchy")
+  parentId String?
+  parent   KnowledgeTag?  @relation("TagHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children KnowledgeTag[] @relation("TagHierarchy")
 
   // 排序与编码
-  order     Int      @default(0) // 用于保持教材顺序
-  code      String?              // 如 "1.2.1"
+  order Int     @default(0) // 用于保持教材顺序
+  code  String? // 如 "1.2.1"
 
   // 区分系统预设 vs 用户自定义
-  isSystem  Boolean  @default(false)
-  userId    String?  // 如果是用户自定义标签，绑定 userId
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isSystem Boolean @default(false)
+  userId   String? // 如果是用户自定义标签，绑定 userId
+  user     User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // 与错题的多对多关系
   errorItems ErrorItem[]
@@ -79,62 +83,92 @@ model Subject {
 }
 
 model ErrorItem {
-  id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subjectId      String?
-  subject        Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
   originalImageUrl String
   ocrText          String?
-  
-  // AI Analysis
-  questionText     String? // Parsed question
-  answerText       String? // AI provided answer
-  analysis         String? // AI analysis/explanation
-  wrongAnswerText  String? // Student's wrong answer/work if visible
-  mistakeAnalysis  String? // Analysis of why the wrong answer happened
-  mistakeStatus    String? // not_attempted, wrong_attempt, unknown
-  knowledgePoints  String? // [DEPRECATED] JSON string - kept for migration only
-  
-  // New: many-to-many relation with KnowledgeTag
-  tags             KnowledgeTag[]
-  
-  // User Metadata
-  source           String? // e.g. "Midterm Exam"
-  errorType        String? // e.g. "Calculation", "Concept"
-  userNotes        String?
-  
-  masteryLevel     Int     @default(0) // 0: New, 1: Reviewing, 2: Mastered
-  gradeSemester    String? // e.g. "Junior High Grade 2, 1st Semester"
-  paperLevel       String? // e.g. "A", "B", "Other"
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 
-  reviewSchedules ReviewSchedule[]
+  // AI Analysis
+  questionText    String? // Parsed question
+  answerText      String? // AI provided answer
+  analysis        String? // AI analysis/explanation
+  wrongAnswerText String? // Student's wrong answer/work if visible
+  mistakeAnalysis String? // Analysis of why the wrong answer happened
+  mistakeStatus   String? // not_attempted, wrong_attempt, unknown
+  knowledgePoints String? // [DEPRECATED] JSON string - kept for migration only
+
+  // New: many-to-many relation with KnowledgeTag
+  tags KnowledgeTag[]
+
+  // User Metadata
+  source    String? // e.g. "Midterm Exam"
+  errorType String? // e.g. "Calculation", "Concept"
+  userNotes String?
+
+  masteryLevel  Int     @default(0) // 0: New, 1: Reviewing, 2: Mastered
+  gradeSemester String? // e.g. "Junior High Grade 2, 1st Semester"
+  paperLevel    String? // e.g. "A", "B", "Other"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reviewSchedules     ReviewSchedule[]
+  assignedByTeacherId String?
+  assignedByTeacher   User?            @relation("AssignedByTeacher", fields: [assignedByTeacherId], references: [id], onDelete: SetNull)
+  sourceErrorItemId   String?
+  sourceErrorItem     ErrorItem?       @relation("ErrorItemCopies", fields: [sourceErrorItemId], references: [id], onDelete: SetNull)
+  studentCopies       ErrorItem[]      @relation("ErrorItemCopies")
+  sourceAssignments   Assignment[]     @relation("SourceErrorItem")
+  studentAssignment   Assignment?      @relation("StudentErrorItem")
+
+  @@index([assignedByTeacherId])
+  @@index([sourceErrorItemId])
+}
+
+model Assignment {
+  id                 String    @id @default(cuid())
+  teacherId          String
+  teacher            User      @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            User      @relation("StudentAssignments", fields: [studentId], references: [id], onDelete: Cascade)
+  sourceErrorItemId  String
+  sourceErrorItem    ErrorItem @relation("SourceErrorItem", fields: [sourceErrorItemId], references: [id], onDelete: Cascade)
+  studentErrorItemId String    @unique
+  studentErrorItem   ErrorItem @relation("StudentErrorItem", fields: [studentErrorItemId], references: [id], onDelete: Cascade)
+  status             String    @default("assigned")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([studentId, sourceErrorItemId])
+  @@index([teacherId])
+  @@index([studentId])
+  @@index([sourceErrorItemId])
 }
 
 model ReviewSchedule {
   id          String    @id @default(cuid())
   errorItemId String
   errorItem   ErrorItem @relation(fields: [errorItemId], references: [id], onDelete: Cascade)
-  
+
   scheduledFor DateTime
   completedAt  DateTime?
   isCorrect    Boolean? // Result of the review
-  
-  createdAt    DateTime @default(now())
+
+  createdAt DateTime @default(now())
 }
 
 model PracticeRecord {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  subject   String?  // e.g. "Math", "Physics"
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subject    String? // e.g. "Math", "Physics"
   difficulty String? // "easy", "medium", "hard", "harder"
-  isCorrect Boolean?
-  
+  isCorrect  Boolean?
+
   createdAt DateTime @default(now())
 }

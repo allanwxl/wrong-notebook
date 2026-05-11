@@ -100,10 +100,13 @@ export function SettingsDialog() {
     const [selectedFileName, setSelectedFileName] = useState<string>("");
 
     const router = useRouter();
+    const isAdmin = (session?.user as any)?.role === 'admin';
 
     useEffect(() => {
         if (open) {
-            fetchSettings();
+            if (isAdmin) {
+                fetchSettings();
+            }
             fetchProfile();
         }
         // 获取版本号
@@ -111,7 +114,7 @@ export function SettingsDialog() {
             .then((res) => res.json())
             .then((data) => setVersion(data.version))
             .catch(() => {});
-    }, [open]);
+    }, [open, isAdmin]);
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -673,7 +676,7 @@ export function SettingsDialog() {
                 </DialogHeader>
 
                 <Tabs defaultValue="general" className="w-full">
-                    <TabsList className={`grid w-full grid-cols-4 ${(session?.user as any)?.role === 'admin' ? 'sm:grid-cols-7' : 'sm:grid-cols-4'} gap-1 h-auto`}>
+                    <TabsList className={`grid w-full grid-cols-4 ${isAdmin ? 'sm:grid-cols-7' : 'sm:grid-cols-4'} gap-1 h-auto`}>
                         <TabsTrigger value="general" className="px-2 sm:px-3">
                             <Languages className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">{t.settings?.tabs?.general || "General"}</span>
@@ -682,7 +685,7 @@ export function SettingsDialog() {
                             <User className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">{t.settings?.tabs?.account || "Account"}</span>
                         </TabsTrigger>
-                        {(session?.user as any)?.role === 'admin' && (
+                        {isAdmin && (
                             <>
                                 <TabsTrigger value="ai" className="px-2 sm:px-3">
                                     <Bot className="h-4 w-4 sm:mr-2" />
@@ -727,6 +730,7 @@ export function SettingsDialog() {
                                 </Select>
                             </div>
 
+                            {isAdmin && (
                             <div className="space-y-2 pt-4 border-t">
                                 <Label>{t.settings?.general?.timeoutLabel || "AI Analysis Timeout (Seconds)"}</Label>
                                 <Input
@@ -767,11 +771,14 @@ export function SettingsDialog() {
                                     {t.settings?.general?.timeoutDesc || "Increase this value if you experience frequent timeouts during AI analysis."}
                                 </p>
                             </div>
+                            )}
                         </div>
-                        <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
-                            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {t.settings?.save || "Save Settings"}
-                        </Button>
+                        {isAdmin && (
+                            <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
+                                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t.settings?.save || "Save Settings"}
+                            </Button>
+                        )}
                     </TabsContent>
 
                     {/* Account Tab */}
@@ -791,11 +798,12 @@ export function SettingsDialog() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label>{t.auth?.email || "Email"}</Label>
+                                        <Label>账号（邮箱或手机号）</Label>
                                         <Input
                                             value={profile.email || ""}
                                             onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                                            type="email"
+                                            type="text"
+                                            autoComplete="username"
                                         />
                                     </div>
                                 </div>
@@ -1236,7 +1244,7 @@ export function SettingsDialog() {
 
                     {/* Admin Tab */}
                     {
-                        (session?.user as any)?.role === 'admin' && (
+                        isAdmin && (
                             <TabsContent value="admin" className="space-y-4 py-4">
                                 <UserManagement />
                             </TabsContent>
@@ -1273,7 +1281,7 @@ export function SettingsDialog() {
                                                 )}
                                                 {t.settings?.exportData || "Export"}
                                             </Button>
-                                            {(session?.user as any)?.role === 'admin' && (
+                                            {isAdmin && (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
@@ -1341,7 +1349,7 @@ export function SettingsDialog() {
                                                     {t.settings?.importData || "Import"}
                                                 </Button>
                                             )}
-                                            {selectedFile && (session?.user as any)?.role === 'admin' && (
+                                            {selectedFile && isAdmin && (
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
@@ -1366,7 +1374,7 @@ export function SettingsDialog() {
                             </div>
 
                             {/* Migrate Tags (Admin Only) */}
-                            {(session?.user as any)?.role === 'admin' && (
+                            {isAdmin && (
                                 <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
                                     <div className="flex items-center justify-between">
                                         <div className="flex flex-col">
@@ -1444,7 +1452,7 @@ export function SettingsDialog() {
                             </div>
 
                             {/* System Reset (Admin Only) */}
-                            {(session?.user as any)?.role === 'admin' && (
+                            {isAdmin && (
                                 <>
                                     {/* System Reset */}
                                     <div className="p-4 border border-red-600/50 rounded-lg bg-red-100/50">

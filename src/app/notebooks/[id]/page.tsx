@@ -13,6 +13,7 @@ import { Notebook } from "@/types/api";
 import { apiClient } from "@/lib/api-client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSession } from "next-auth/react";
 
 // ... imports
 
@@ -20,6 +21,7 @@ export default function NotebookDetailPage() {
     const params = useParams();
     const router = useRouter();
     const { t } = useLanguage();
+    const { data: session } = useSession();
     const [notebook, setNotebook] = useState<Notebook | null>(null);
     const [loading, setLoading] = useState(true);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -58,6 +60,8 @@ export default function NotebookDetailPage() {
     }
 
     if (!notebook) return null;
+    const currentRole = session?.user?.role || "user";
+    const canUpload = currentRole === "admin" || currentRole === "teacher" || session?.user?.canUploadErrors !== false;
 
     return (
         <main className="min-h-screen p-4 md:p-8 bg-background">
@@ -81,15 +85,17 @@ export default function NotebookDetailPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                        <Link href={`/notebooks/${notebook.id}/add`}>
-                            <Button size="sm" className="hidden sm:flex">
-                                <Plus className="mr-2 h-4 w-4" />
-                                {t.notebooks?.addError || "Add Error"}
-                            </Button>
-                            <Button size="icon" className="sm:hidden">
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                        </Link>
+                        {canUpload && (
+                            <Link href={`/notebooks/${notebook.id}/add`}>
+                                <Button size="sm" className="hidden sm:flex">
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    {t.notebooks?.addError || "Add Error"}
+                                </Button>
+                                <Button size="icon" className="sm:hidden">
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </Link>
+                        )}
                         <Link href="/">
                             <Button variant="ghost" size="icon">
                                 <House className="h-5 w-5" />

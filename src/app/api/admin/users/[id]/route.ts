@@ -7,6 +7,7 @@ import { forbidden, badRequest, internalError } from "@/lib/api-errors"
 import { createLogger } from "@/lib/logger"
 
 const logger = createLogger('api:admin:users:id');
+const VALID_ROLES = new Set(["admin", "teacher", "user"]);
 
 export async function PATCH(
     req: Request,
@@ -21,10 +22,10 @@ export async function PATCH(
 
     try {
         const body = await req.json()
-        const { isActive } = body
+        const { isActive, role, canUploadErrors } = body
 
         // Prevent disabling self
-        if (id === session?.user.id) {
+        if (id === session?.user.id && isActive === false) {
             return badRequest("Cannot disable your own account")
         }
 
@@ -33,17 +34,47 @@ export async function PATCH(
             where: { id }
         })
 
-        if (targetUser?.email === 'admin@localhost') {
+        if (!targetUser) {
+            return badRequest("User not found")
+        }
+
+        if (targetUser.email === 'admin@localhost' && isActive === false) {
             return badRequest("Cannot disable super admin")
         }
+
+        if (role !== undefined && !VALID_ROLES.has(role)) {
+            return badRequest("Invalid role")
+        }
+
+        if (id === session?.user.id && role && role !== "admin") {
+            return badRequest("Cannot change your own admin role")
+        }
+
+        const nextRole = role ?? targetUser.role;
+        const nextIsActive = typeof isActive === "boolean" ? isActive : targetUser.isActive;
+        if (targetUser.role === "admin" && (nextRole !== "admin" || !nextIsActive)) {
+            const activeAdminCount = await prisma.user.count({
+                where: {
+                    role: "admin",
+                    isActive: true,
+                    NOT: { id },
+                },
+            });
+            if (activeAdminCount === 0) {
+                return badRequest("At least one active administrator is required")
+            }
+        }
+
+        const updateData: { isActive?: boolean; role?: string; canUploadErrors?: boolean } = {};
+        if (typeof isActive === "boolean") updateData.isActive = isActive;
+        if (role !== undefined) updateData.role = role;
+        if (typeof canUploadErrors === "boolean") updateData.canUploadErrors = canUploadErrors;
 
         const user = await prisma.user.update({
             where: {
                 id
             },
-            data: {
-                isActive
-            }
+            data: updateData
         })
 
         return NextResponse.json(user)
@@ -78,6 +109,16 @@ export async function DELETE(
         if (targetUser?.role === 'admin') {
             if (targetUser.email === 'admin@localhost') {
                 return badRequest("Cannot delete super admin")
+            }
+            const activeAdminCount = await prisma.user.count({
+                where: {
+                    role: "admin",
+                    isActive: true,
+                    NOT: { id },
+                },
+            });
+            if (targetUser.isActive && activeAdminCount === 0) {
+                return badRequest("At least one active administrator is required")
             }
         }
 

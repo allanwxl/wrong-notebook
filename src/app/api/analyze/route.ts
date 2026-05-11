@@ -5,8 +5,9 @@ import { getServerSession } from "next-auth";
 import { calculateGradeNumber, inferSubjectFromName } from "@/lib/knowledge-tags";
 import { calculateGrade } from "@/lib/grade-calculator";
 import { prisma } from "@/lib/prisma";
-import { badRequest, internalError, createErrorResponse, ErrorCode } from "@/lib/api-errors";
+import { badRequest, createErrorResponse, ErrorCode, forbidden, unauthorized } from "@/lib/api-errors";
 import { createLogger } from "@/lib/logger";
+import { canUploadErrorItems, getActiveCurrentUser } from "@/lib/auth-utils";
 
 const logger = createLogger('api:analyze');
 
@@ -15,15 +16,20 @@ export async function POST(req: Request) {
 
     const session = await getServerSession(authOptions);
 
-    // 认证检查
-    if (!session) {
-        logger.warn('Unauthorized access attempt');
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const currentUser = await getActiveCurrentUser(session);
+    if (!currentUser) {
+        logger.warn('Unauthorized or inactive user access attempt');
+        return unauthorized("Authentication required");
+    }
+    if (!canUploadErrorItems(currentUser)) {
+        logger.warn({ userId: currentUser.id }, 'Upload analysis denied by role permission');
+        return forbidden("上传权限已被管理员关闭");
     }
 
     try {
         const body = await req.json();
-        let { imageBase64, mimeType, language, subjectId } = body;
+        let { imageBase64, mimeType } = body;
+        const { language, subjectId } = body;
 
         logger.debug({
             imageLength: imageBase64?.length,
@@ -55,15 +61,10 @@ export async function POST(req: Request) {
         if (session?.user?.email) {
             try {
                 // 获取用户信息
-                const user = await prisma.user.findUnique({
-                    where: { email: session.user.email },
-                    select: { educationStage: true, enrollmentYear: true }
-                });
-
-                if (user) {
-                    userGrade = calculateGradeNumber(user.educationStage, user.enrollmentYear);
-                    if (user.educationStage && user.enrollmentYear) {
-                        userGradeSemester = calculateGrade(user.educationStage, user.enrollmentYear, new Date(), 'zh');
+                if (currentUser) {
+                    userGrade = calculateGradeNumber(currentUser.educationStage ?? null, currentUser.enrollmentYear ?? null);
+                    if (currentUser.educationStage && currentUser.enrollmentYear) {
+                        userGradeSemester = calculateGrade(currentUser.educationStage, currentUser.enrollmentYear, new Date(), 'zh');
                     }
                     logger.debug({ userGrade, userGradeSemester }, 'Calculated user grade');
                 }
@@ -119,38 +120,40 @@ export async function POST(req: Request) {
         logger.info('AI analysis successful');
 
         return NextResponse.json(analysisResult);
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : undefined;
         logger.error({
-            error: error.message,
-            stack: error.stack
+            error: message,
+            stack
         }, 'Analysis error occurred');
 
         // 返回具体的错误类型，便于前端显示详细提示
-        let errorMessage = error.message || "Failed to analyze image";
+        let errorMessage = message || "Failed to analyze image";
 
         // 识别特定错误类型
-        if (error.message && (
-            error.message === 'AI_CONNECTION_FAILED' ||
-            error.message === 'AI_RESPONSE_ERROR' ||
-            error.message.includes('AI_AUTH_ERROR') ||
-            error.message === 'AI_TIMEOUT_ERROR' ||
-            error.message === 'AI_QUOTA_EXCEEDED' ||
-            error.message === 'AI_PERMISSION_DENIED' ||
-            error.message === 'AI_NOT_FOUND' ||
-            error.message === 'AI_SERVICE_UNAVAILABLE' ||
-            error.message === 'AI_UNKNOWN_ERROR'
+        if (message && (
+            message === 'AI_CONNECTION_FAILED' ||
+            message === 'AI_RESPONSE_ERROR' ||
+            message.includes('AI_AUTH_ERROR') ||
+            message === 'AI_TIMEOUT_ERROR' ||
+            message === 'AI_QUOTA_EXCEEDED' ||
+            message === 'AI_PERMISSION_DENIED' ||
+            message === 'AI_NOT_FOUND' ||
+            message === 'AI_SERVICE_UNAVAILABLE' ||
+            message === 'AI_UNKNOWN_ERROR'
         )) {
             // 直接传递 AI Provider 定义的错误类型 (如果是 AI_AUTH_ERROR，提取出来)
-            if (error.message.includes('AI_AUTH_ERROR')) {
+            if (message.includes('AI_AUTH_ERROR')) {
                 errorMessage = 'AI_AUTH_ERROR';
             } else {
-                errorMessage = error.message;
+                errorMessage = message;
             }
-        } else if (error.message?.includes('Zod') || error.message?.includes('validate')) {
+        } else if (message.includes('Zod') || message.includes('validate')) {
             // Zod 验证错误
             errorMessage = 'AI_RESPONSE_ERROR';
         }
 
-        return createErrorResponse(errorMessage, 500, ErrorCode.AI_ERROR, error.message);
+        return createErrorResponse(errorMessage, 500, ErrorCode.AI_ERROR, message);
     }
 }

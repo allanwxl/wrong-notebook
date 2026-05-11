@@ -3,10 +3,12 @@ import { hash } from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { getAppConfig } from "@/lib/config"
+import { isValidUserIdentifier, normalizeUserIdentifier, userIdentifierErrorMessage } from "@/lib/user-identifier"
 
 const userSchema = z.object({
-    // 支持标准邮箱和本地邮箱（如 user@localhost）
-    email: z.string().regex(/^[^\s@]+@[^\s@]+$/, "Invalid email format"),
+    email: z.string().min(1).transform(normalizeUserIdentifier).refine(isValidUserIdentifier, {
+        message: userIdentifierErrorMessage(),
+    }),
     password: z.string().min(6),
     name: z.string().min(1),
     educationStage: z.string().optional(),
@@ -33,7 +35,7 @@ export async function POST(req: Request) {
 
         if (existingUser) {
             return NextResponse.json(
-                { user: null, message: "User with this email already exists" },
+                { user: null, message: "User with this email or phone already exists" },
                 { status: 409 }
             )
         }

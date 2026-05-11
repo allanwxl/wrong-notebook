@@ -1,21 +1,34 @@
 import { NextResponse } from "next/server";
 import { getAppConfig, updateAppConfig } from "@/lib/config";
-import { internalError } from "@/lib/api-errors";
+import { forbidden, internalError, unauthorized } from "@/lib/api-errors";
 import { createLogger } from "@/lib/logger";
 import { OpenAIInstance } from "@/types/api";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getActiveCurrentUser, canManageSystemSettings } from "@/lib/auth-utils";
 
 const logger = createLogger('api:settings');
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+    const session = await getServerSession(authOptions);
+    const user = await getActiveCurrentUser(session);
+    if (!user) return unauthorized();
+    if (!canManageSystemSettings(user)) return forbidden("Admin access required");
+
     const config = getAppConfig();
-    // Return full config including API keys since this is an authenticated endpoint
+    // Return full config including API keys only to administrators.
     return NextResponse.json(config);
 }
 
 export async function POST(req: Request) {
     try {
+        const session = await getServerSession(authOptions);
+        const user = await getActiveCurrentUser(session);
+        if (!user) return unauthorized();
+        if (!canManageSystemSettings(user)) return forbidden("Admin access required");
+
         const body = await req.json();
         const currentConfig = getAppConfig();
 
@@ -53,5 +66,4 @@ export async function POST(req: Request) {
         return internalError("Failed to update settings");
     }
 }
-
 

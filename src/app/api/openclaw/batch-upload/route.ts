@@ -5,6 +5,7 @@ import { createErrorResponse, ErrorCode } from "@/lib/api-errors";
 import { calculateGrade } from "@/lib/grade-calculator";
 import { inferSubjectFromName } from "@/lib/knowledge-tags";
 import { findParentTagIdForGrade } from "@/lib/tag-recognition";
+import { normalizeUserIdentifier } from "@/lib/user-identifier";
 import { compare } from "bcryptjs";
 
 const logger = createLogger('api:openclaw:batch-upload');
@@ -248,11 +249,12 @@ export async function POST(req: Request) {
                 );
             }
 
-            // 从数据库查找用户（支持邮箱或用户名登录）
+            // 从数据库查找用户（支持邮箱、手机号或用户名登录）
+            const normalizedUsername = normalizeUserIdentifier(username);
             user = await prisma.user.findFirst({
                 where: {
                     OR: [
-                        { email: username },
+                        { email: normalizedUsername },
                         { name: username }
                     ]
                 }

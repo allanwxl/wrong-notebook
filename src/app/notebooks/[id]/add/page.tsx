@@ -15,6 +15,8 @@ import { processImageFile } from "@/lib/image-utils";
 import { ArrowLeft } from "lucide-react";
 import { ProgressFeedback, ProgressStatus } from "@/components/ui/progress-feedback";
 import { frontendLogger } from "@/lib/frontend-logger";
+import { useSession } from "next-auth/react";
+import { AssignmentStudentSelector } from "@/components/assignment-student-selector";
 
 export default function AddErrorPage() {
     const params = useParams();
@@ -26,8 +28,13 @@ export default function AddErrorPage() {
     const [parsedData, setParsedData] = useState<ParsedQuestion | null>(null);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
     const { t, language } = useLanguage();
+    const { data: session } = useSession();
     const [notebook, setNotebook] = useState<Notebook | null>(null);
     const [config, setConfig] = useState<AppConfig | null>(null);
+    const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+    const currentRole = session?.user?.role || "user";
+    const canUpload = currentRole === "admin" || currentRole === "teacher" || session?.user?.canUploadErrors !== false;
+    const canAssign = currentRole === "admin" || currentRole === "teacher";
 
     // Cropper state
     const [croppingImage, setCroppingImage] = useState<string | null>(null);
@@ -55,18 +62,19 @@ export default function AddErrorPage() {
                 router.push("/notebooks");
             });
 
-        // Fetch settings for timeouts
-        apiClient.get<AppConfig>("/api/settings")
-            .then(data => {
-                setConfig(data);
-                if (data.timeouts?.analyze) {
-                    frontendLogger.info('[Config]', 'Loaded timeout settings', {
-                        analyze: data.timeouts.analyze
-                    });
-                }
-            })
-            .catch(err => console.error("Failed to fetch config:", err));
-    }, [notebookId, router]);
+        if (session?.user?.role === "admin") {
+            apiClient.get<AppConfig>("/api/settings")
+                .then(data => {
+                    setConfig(data);
+                    if (data.timeouts?.analyze) {
+                        frontendLogger.info('[Config]', 'Loaded timeout settings', {
+                            analyze: data.timeouts.analyze
+                        });
+                    }
+                })
+                .catch(err => console.error("Failed to fetch config:", err));
+        }
+    }, [notebookId, router, session?.user?.role]);
 
     // Simulate progress for smoother UX with timeout protection
     useEffect(() => {
@@ -106,6 +114,11 @@ export default function AddErrorPage() {
     };
 
     const handleAnalyze = async (file: File) => {
+        if (!canUpload) {
+            alert("上传权限已被管理员关闭");
+            return;
+        }
+
         const startTime = Date.now();
         frontendLogger.info('[AddAnalyze]', 'Starting analysis flow', {
             timeoutSettings: {
@@ -246,6 +259,12 @@ export default function AddErrorPage() {
                 subjectId: notebookId,
             });
 
+            if (canAssign && selectedStudentIds.length > 0) {
+                await apiClient.post(`/api/error-items/${result.id}/assign`, {
+                    studentIds: selectedStudentIds,
+                });
+            }
+
             // 检查是否是重复提交（后端去重返回）
             if (result.duplicate) {
                 frontendLogger.info('[AddSave]', 'Duplicate submission detected, using existing record');
@@ -297,19 +316,33 @@ export default function AddErrorPage() {
                 </div>
 
                 {/* Main Content */}
-                {step === "upload" && (
+                {step === "upload" && canUpload && (
                     <UploadZone onImageSelect={onImageSelect} isAnalyzing={analysisStep !== 'idle'} />
                 )}
 
+                {step === "upload" && !canUpload && (
+                    <div className="rounded-lg border bg-muted/30 p-8 text-center text-muted-foreground">
+                        上传权限已被管理员关闭。你仍可查看、复习和练习已有错题。
+                    </div>
+                )}
+
                 {step === "review" && parsedData && currentImage && (
-                    <CorrectionEditor
-                        initialData={parsedData}
-                        imagePreview={currentImage}
-                        onSave={handleSave}
-                        onCancel={() => setStep("upload")}
-                        initialSubjectId={notebookId}
-                        aiTimeout={aiTimeout}
-                    />
+                    <div className="space-y-4">
+                        {canAssign && (
+                            <AssignmentStudentSelector
+                                selectedIds={selectedStudentIds}
+                                onChange={setSelectedStudentIds}
+                            />
+                        )}
+                        <CorrectionEditor
+                            initialData={parsedData}
+                            imagePreview={currentImage}
+                            onSave={handleSave}
+                            onCancel={() => setStep("upload")}
+                            initialSubjectId={notebookId}
+                            aiTimeout={aiTimeout}
+                        />
+                    </div>
                 )}
             </div>
 

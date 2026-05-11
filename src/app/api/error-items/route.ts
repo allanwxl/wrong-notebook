@@ -3,11 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { calculateGrade } from "@/lib/grade-calculator";
-import { unauthorized, internalError } from "@/lib/api-errors";
+import { unauthorized, internalError, forbidden } from "@/lib/api-errors";
 import { createLogger } from "@/lib/logger";
 import { findParentTagIdForGrade } from "@/lib/tag-recognition";
 import { inferSubjectFromName } from "@/lib/knowledge-tags";
 import { normalizeMistakeStatusForSave } from "@/lib/mistake-status";
+import { canUploadErrorItems, getActiveCurrentUser } from "@/lib/auth-utils";
 
 const logger = createLogger('api:error-items');
 
@@ -49,20 +50,14 @@ export async function POST(req: Request) {
             paperLevel,
         }, 'Request parameters received');
 
-        // 查找用户
-        let user;
-        if (session?.user?.email) {
-            user = await prisma.user.findUnique({
-                where: { email: session.user.email },
-            });
-            logger.debug({ userId: user?.id, email: session.user.email }, 'User lookup result');
-        } else {
-            logger.warn('No session email found');
-        }
-
+        const user = await getActiveCurrentUser(session);
         if (!user) {
             logger.warn({ sessionEmail: session?.user?.email }, 'User not found in DB');
             return unauthorized("No user found in DB");
+        }
+        if (!canUploadErrorItems(user)) {
+            logger.warn({ userId: user.id }, 'Upload save denied by role permission');
+            return forbidden("上传权限已被管理员关闭");
         }
 
         // ========== 去重检查：2秒内同一用户提交相同题目视为重复 ==========

@@ -247,7 +247,32 @@ describe('/api/user', () => {
             expect(response.status).toBe(200);
         });
 
-        it('应该拒绝无效邮箱格式', async () => {
+        it('应该接受手机号格式', async () => {
+            const updatedUser = {
+                name: 'User',
+                email: '13800138000',
+                educationStage: 'junior_high',
+                enrollmentYear: 2025,
+            };
+            mocks.mockPrismaUser.update.mockResolvedValue(updatedUser);
+
+            const request = new Request('http://localhost/api/user', {
+                method: 'PATCH',
+                body: JSON.stringify({ email: '138-0013-8000' }),
+                headers: { 'Content-Type': 'application/json' },
+            });
+
+            const response = await PATCH(request);
+
+            expect(response.status).toBe(200);
+            expect(mocks.mockPrismaUser.update).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({
+                    email: '13800138000',
+                }),
+            }));
+        });
+
+        it('应该拒绝无效账号格式', async () => {
             const request = new Request('http://localhost/api/user', {
                 method: 'PATCH',
                 body: JSON.stringify({ email: 'invalid-email' }),
@@ -258,7 +283,7 @@ describe('/api/user', () => {
             const data = await response.json();
 
             expect(response.status).toBe(400);
-            expect(data.message).toBe('Invalid email format');
+            expect(data.message).toBe('Invalid email or phone format');
         });
     });
 

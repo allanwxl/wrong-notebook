@@ -1,15 +1,28 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:22-alpine AS base
+
+ARG APK_MIRROR=https://mirrors.aliyun.com/alpine
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+
+ENV npm_config_registry=${NPM_REGISTRY}
+ENV PRISMA_ENGINES_MIRROR=${PRISMA_ENGINES_MIRROR}
+
+RUN if [ -n "$APK_MIRROR" ]; then \
+      sed -i "s#https://dl-cdn.alpinelinux.org/alpine#${APK_MIRROR}#g" /etc/apk/repositories; \
+    fi
 
 # Install dependencies only when needed
 FROM base AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json ./
-RUN apk add --no-cache python3 make g++ \
-    && npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit --fund=false
 
 # Rebuild the source code only when needed
 FROM base AS builder

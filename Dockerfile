@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN apk add --no-cache python3 make g++ \
+    && npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder

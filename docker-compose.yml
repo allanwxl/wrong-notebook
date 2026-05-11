@@ -7,7 +7,7 @@ services:
     container_name: wrong-notebook
     restart: always
     ports:
-      - "3000:3000"
+      - "3033:3000"
     environment:
       # NEXTAUTH_URL 根据实际情况设置你的信息
       #- NEXTAUTH_URL=http://your_domain_name:3000

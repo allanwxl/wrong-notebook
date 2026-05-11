@@ -20,7 +20,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Trash2, Loader2, AlertTriangle, Save, Eye, EyeOff, Languages, User, Bot, Shield, RefreshCw, Plus, Zap, CheckCircle2, XCircle, Download, Upload } from "lucide-react";
+import { Settings, Trash2, Loader2, AlertTriangle, Save, Eye, EyeOff, Languages, User, Bot, Shield, RefreshCw, Plus, Zap, CheckCircle2, XCircle, Download, Upload, MessageSquareText } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -31,7 +31,6 @@ import { AppConfig, UserProfile, UpdateUserProfileRequest, OpenAIInstance } from
 import { ModelSelector } from "@/components/ui/model-selector";
 import { PromptSettings } from "@/components/settings/prompt-settings";
 
-import { MessageSquareText, Info, ExternalLink, Github, ScrollText } from "lucide-react";
 const MAX_OPENAI_INSTANCES = 10;
 
 // 生成唯一 ID
@@ -62,8 +61,6 @@ export function SettingsDialog() {
     const [migratingTags, setMigratingTags] = useState(false);
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [version, setVersion] = useState<string>("");
-    const [showApiKey, setShowApiKey] = useState(false);
     const [config, setConfig] = useState<AppConfig>({ aiProvider: 'gemini' });
     // OpenAI 多实例状态
     const [selectedInstanceId, setSelectedInstanceId] = useState<string | undefined>(undefined);
@@ -109,11 +106,6 @@ export function SettingsDialog() {
             }
             fetchProfile();
         }
-        // 获取版本号
-        fetch("/api/version")
-            .then((res) => res.json())
-            .then((data) => setVersion(data.version))
-            .catch(() => {});
     }, [open, isAdmin]);
 
     const fetchSettings = async () => {
@@ -676,7 +668,7 @@ export function SettingsDialog() {
                 </DialogHeader>
 
                 <Tabs defaultValue="general" className="w-full">
-                    <TabsList className={`grid w-full grid-cols-4 ${isAdmin ? 'sm:grid-cols-7' : 'sm:grid-cols-4'} gap-1 h-auto`}>
+                    <TabsList className={`grid w-full grid-cols-3 ${isAdmin ? 'sm:grid-cols-6' : 'sm:grid-cols-3'} gap-1 h-auto`}>
                         <TabsTrigger value="general" className="px-2 sm:px-3">
                             <Languages className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">{t.settings?.tabs?.general || "General"}</span>
@@ -704,10 +696,6 @@ export function SettingsDialog() {
                         <TabsTrigger value="danger" className="px-2 sm:px-3">
                             <AlertTriangle className="h-4 w-4 sm:mr-2" />
                             <span className="hidden sm:inline">{t.settings?.tabs?.danger || "Danger"}</span>
-                        </TabsTrigger>
-                        <TabsTrigger value="about" className="px-2 sm:px-3">
-                            <Info className="h-4 w-4 sm:mr-2" />
-                            <span className="hidden sm:inline">{t.settings?.tabs?.about || "About"}</span>
                         </TabsTrigger>
                     </TabsList>
 
@@ -1007,28 +995,14 @@ export function SettingsDialog() {
                                                 </div>
                                                 <div className="space-y-2">
                                                     <Label>API Key <span className="text-destructive">*</span></Label>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type={showApiKey ? "text" : "password"}
-                                                            value={getSelectedInstance()?.apiKey || ''}
-                                                            onChange={(e) => updateOpenAIInstance('apiKey', e.target.value)}
-                                                            placeholder="sk-..."
-                                                            className={`pr-10 ${!getSelectedInstance()?.apiKey?.trim() ? 'border-destructive' : ''}`}
-                                                        />
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                                            onClick={() => setShowApiKey(!showApiKey)}
-                                                        >
-                                                            {showApiKey ? (
-                                                                <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                                            ) : (
-                                                                <Eye className="h-4 w-4 text-muted-foreground" />
-                                                            )}
-                                                        </Button>
-                                                    </div>
+                                                    <Input
+                                                        type="password"
+                                                        value={getSelectedInstance()?.apiKey || ''}
+                                                        onChange={(e) => updateOpenAIInstance('apiKey', e.target.value)}
+                                                        placeholder="sk-..."
+                                                        autoComplete="new-password"
+                                                        className={!getSelectedInstance()?.apiKey?.trim() ? 'border-destructive' : ''}
+                                                    />
                                                 </div>
                                                 <div className="space-y-2 pt-4 border-t">
                                                     <Label>Base URL <span className="text-destructive">*</span></Label>
@@ -1055,28 +1029,13 @@ export function SettingsDialog() {
                                     <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                                         <div className="space-y-2">
                                             <Label>API Key</Label>
-                                            <div className="relative">
-                                                <Input
-                                                    type={showApiKey ? "text" : "password"}
-                                                    value={config.gemini?.apiKey || ''}
-                                                    onChange={(e) => updateConfig('gemini', 'apiKey', e.target.value)}
-                                                    placeholder="AIza..."
-                                                    className="pr-10"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                                    onClick={() => setShowApiKey(!showApiKey)}
-                                                >
-                                                    {showApiKey ? (
-                                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                                    ) : (
-                                                        <Eye className="h-4 w-4 text-muted-foreground" />
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            <Input
+                                                type="password"
+                                                value={config.gemini?.apiKey || ''}
+                                                onChange={(e) => updateConfig('gemini', 'apiKey', e.target.value)}
+                                                placeholder="AIza..."
+                                                autoComplete="new-password"
+                                            />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Base URL (Optional)</Label>
@@ -1118,28 +1077,14 @@ export function SettingsDialog() {
                                         </div>
                                         <div className="space-y-2">
                                             <Label>API Key <span className="text-destructive">*</span></Label>
-                                            <div className="relative">
-                                                <Input
-                                                    type={showApiKey ? "text" : "password"}
-                                                    value={config.azure?.apiKey || ''}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, azure: { ...prev.azure, apiKey: e.target.value } }))}
-                                                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                                                    className={`pr-10 ${!config.azure?.apiKey?.trim() ? 'border-destructive' : ''}`}
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                                                    onClick={() => setShowApiKey(!showApiKey)}
-                                                >
-                                                    {showApiKey ? (
-                                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                                    ) : (
-                                                        <Eye className="h-4 w-4 text-muted-foreground" />
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            <Input
+                                                type="password"
+                                                value={config.azure?.apiKey || ''}
+                                                onChange={(e) => setConfig(prev => ({ ...prev, azure: { ...prev.azure, apiKey: e.target.value } }))}
+                                                placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                                autoComplete="new-password"
+                                                className={!config.azure?.apiKey?.trim() ? 'border-destructive' : ''}
+                                            />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>{t.settings?.ai?.azureApiVersion || "API Version"}</Label>
@@ -1486,52 +1431,6 @@ export function SettingsDialog() {
                         </div>
                     </TabsContent>
 
-                    {/* About Tab */}
-                    <TabsContent value="about" className="space-y-4 py-4">
-                        <div className="flex flex-col items-center justify-center space-y-6 py-8 text-center bg-muted/30 rounded-lg border">
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">{t.app?.title || "Smart Error Notebook"}</h3>
-                                <p className="text-muted-foreground">
-                                    {t.settings?.about?.desc || "AI-powered learning assistant"}
-                                </p>
-                            </div>
-
-                            <div className="flex items-center space-x-2 text-sm text-muted-foreground border px-4 py-2 rounded-full bg-background">
-                                <Info className="h-4 w-4" />
-                                <span>{t.settings?.about?.version || "Version"}: v{version || "unknown"}</span>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-4 w-full sm:w-auto px-4 sm:px-0">
-                                <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
-                                    <a href="https://github.com/wttwins/wrong-notebook" target="_blank" rel="noopener noreferrer">
-                                        <Github className="h-4 w-4" />
-                                        {t.settings?.about?.github || "GitHub Repository"}
-                                        <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
-                                    </a>
-                                </Button>
-
-                                <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
-                                    <a href="https://github.com/wttwins/wrong-notebook/releases" target="_blank" rel="noopener noreferrer">
-                                        <ScrollText className="h-4 w-4" />
-                                        {t.settings?.about?.releaseNotes || "Release Notes"}
-                                        <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
-                                    </a>
-                                </Button>
-
-                                <Button variant="outline" asChild className="gap-2 w-full sm:w-auto">
-                                    <a href="https://github.com/wttwins/wrong-notebook/issues" target="_blank" rel="noopener noreferrer">
-                                        <MessageSquareText className="h-4 w-4" />
-                                        {t.settings?.about?.feedback || "Feedback"}
-                                        <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
-                                    </a>
-                                </Button>
-                            </div>
-
-                            <p className="text-xs text-muted-foreground mt-8">
-                                {t.settings?.about?.copyright || "© 2025 Wttwins. All rights reserved."}
-                            </p>
-                        </div>
-                    </TabsContent>
                 </Tabs>
             </DialogContent>
         </Dialog>

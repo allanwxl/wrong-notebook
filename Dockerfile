@@ -71,7 +71,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+RUN chmod -R a+rX ./public
 
 # Automatically leverage output traces to reduce image size
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -90,8 +91,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/dist-scripts ./dist-scripts
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 # Copy entrypoint script
-COPY --chown=nextjs:nodejs --chmod=755 docker-entrypoint.sh ./
+COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
 COPY --chown=nextjs:nodejs https-server.js ./
+RUN chmod 755 ./docker-entrypoint.sh
 
 EXPOSE 3000
 
@@ -105,5 +107,5 @@ ENV DATABASE_URL="file:/app/data/dev.db"
 ENV AUTH_TRUST_HOST=true
 
 # Use entrypoint script to handle DB initialization
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "./docker-entrypoint.sh"]
 CMD ["node", "server.js"]
